@@ -5,3 +5,6 @@
 @keyframes forest-mist{from{transform:translate3d(-7%,3%,0) scale(.97)}to{transform:translate3d(9%,-4%,0) scale(1.09)}}@keyframes window-glow{0%,13%{opacity:.18}18%{opacity:.21}23%,42%{opacity:.17}49%{opacity:.24}55%,73%{opacity:.22}79%{opacity:.16}86%{opacity:.19}94%,100%{opacity:.18}}@keyframes candle-glow{0%,100%{opacity:1;transform:scale(1);box-shadow:0 0 18px 10px #efba5355}35%{opacity:.62;transform:scale(.8,1.15);box-shadow:0 0 8px 3px #efba5333}70%{opacity:.9;transform:scale(1.2,.9);box-shadow:0 0 22px 12px #efba5366}}@media(max-width:680px){.hero:after{background-position:60% center;mask-image:radial-gradient(ellipse 10% 10% at 64% 44%,#000,transparent),radial-gradient(ellipse 10% 12% at 98% 37%,#000,transparent)}.fog{filter:blur(10px)}.ambience-controls{max-width:300px;gap:8px;margin-top:20px}.ambience-controls button{font-size:12px;padding:10px 12px}}
 
 @media(max-width:680px){.hero-copy{padding-top:54px}.hero{min-height:680px}}
+
+/* Static homepage: no ambient movement or brightness animation. */
+.static-home .hero:after{display:none}.static-home *,.static-home *:before,.static-home *:after{animation:none!important;transition:none!important}.static-home .fog,.static-home .shadow{display:none}html:has(.static-home){scroll-behavior:auto}
