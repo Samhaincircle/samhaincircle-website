@@ -13,36 +13,99 @@ if (menu && nav) {
     }
   });
 }
-const motion = document.querySelector('.motion');
+const motionButtons = [...document.querySelectorAll('.motion')];
 let still = matchMedia('(prefers-reduced-motion: reduce)').matches;
 function updateMotion() {
   document.body.classList.toggle('no-motion', still);
-  if (motion) { motion.setAttribute('aria-pressed', String(still)); motion.textContent = still ? 'Bewegung aus' : 'Bewegung an'; }
+  motionButtons.forEach(button => { button.setAttribute('aria-pressed', String(still)); button.textContent = still ? 'Bewegung aus' : 'Bewegung an'; });
 }
 updateMotion();
-if (motion) motion.addEventListener('click', () => { still = !still; updateMotion(); });
+motionButtons.forEach(button => button.addEventListener('click', () => { still = !still; document.body.classList.toggle('motion-opt-in', !still); updateMotion(); }));
 let audio;
-const sound = document.querySelector('.sound');
+let startingSound = false;
+const audioTimers = new Set();
+const soundButtons = [...document.querySelectorAll('.sound')];
+function updateSound(active, unavailable = false) {
+  soundButtons.forEach(button => {
+    button.setAttribute('aria-pressed', String(active));
+    button.textContent = unavailable ? 'Klang nicht verfügbar' : button.classList.contains('hero-sound') ? (active ? '♬ Atmosphäre ausschalten' : '♬ Atmosphäre einschalten') : (active ? '♬ Klang an' : '♬ Klang aus');
+  });
+}
 async function stopSound() {
   const previous = audio; audio = null;
+  audioTimers.forEach(clearTimeout); audioTimers.clear();
+  updateSound(false);
   if (previous && previous.state !== 'closed') await previous.close();
-  if (sound) { sound.textContent = '♬ Klang aus'; sound.setAttribute('aria-pressed', 'false'); }
 }
-if (sound) sound.addEventListener('click', async () => {
+function scheduleSound(context, callback, min, max) {
+  const timer = setTimeout(() => {
+    audioTimers.delete(timer);
+    if (audio !== context || context.state !== 'running') return;
+    callback(); scheduleSound(context, callback, min, max);
+  }, (min + Math.random() * (max - min)) * 1000);
+  audioTimers.add(timer);
+}
+function playForestTone(context, destination, type) {
+  const now = context.currentTime;
+  const oscillator = context.createOscillator();
+  const gain = context.createGain();
+  const filter = context.createBiquadFilter();
+  oscillator.type = type === 'wood' ? 'sawtooth' : 'sine';
+  filter.type = 'lowpass'; filter.frequency.value = type === 'wood' ? 550 : 800;
+  const length = type === 'wood' ? 2.8 : 1.7;
+  oscillator.frequency.setValueAtTime(type === 'wood' ? 115 : 430, now);
+  oscillator.frequency.exponentialRampToValueAtTime(type === 'wood' ? 48 : 330, now + length);
+  gain.gain.setValueAtTime(0, now);
+  gain.gain.linearRampToValueAtTime(type === 'wood' ? .12 : .09, now + .35);
+  gain.gain.exponentialRampToValueAtTime(.0001, now + length);
+  oscillator.connect(filter); filter.connect(gain); gain.connect(destination);
+  oscillator.start(now); oscillator.stop(now + length + .1);
+  oscillator.onended = () => { oscillator.disconnect(); filter.disconnect(); gain.disconnect(); };
+}
+soundButtons.forEach(button => button.addEventListener('click', async () => {
+  if (startingSound) return;
   if (audio) { await stopSound(); return; }
+  startingSound = true;
+  soundButtons.forEach(item => { item.disabled = true; });
   try {
     const Context = window.AudioContext || window.webkitAudioContext;
-    if (!Context) throw Error();
-    audio = new Context(); await audio.resume();
-    if (!audio) return;
-    const gain = audio.createGain(); gain.gain.value = .018; gain.connect(audio.destination);
-    [110, 164.81, 220].forEach(f => {
-      const oscillator = audio.createOscillator(); oscillator.type = 'sine'; oscillator.frequency.value = f;
-      oscillator.connect(gain); oscillator.start();
-    });
-    sound.textContent = '♬ Klang an'; sound.setAttribute('aria-pressed', 'true');
-  } catch { await stopSound(); sound.textContent = 'Klang nicht verfügbar'; }
-});
+    if (!Context) throw Error('Audio unavailable');
+    const context = new Context(); audio = context;
+    await context.resume();
+    if (audio !== context || document.hidden) { await stopSound(); return; }
+    const master = context.createGain();
+    master.gain.setValueAtTime(0, context.currentTime);
+    master.gain.linearRampToValueAtTime(.16, context.currentTime + 2);
+    master.connect(context.destination);
+    const buffer = context.createBuffer(1, context.sampleRate * 4, context.sampleRate);
+    const data = buffer.getChannelData(0);
+    let brown = 0;
+    for (let i = 0; i < data.length; i++) {
+      brown = (brown + .02 * (Math.random() * 2 - 1)) / 1.02;
+      data[i] = brown * 3.5;
+    }
+    // Smooth the loop boundary so the wind has no click every four seconds.
+    for (let i = 0; i < 256; i++) {
+      const at = data.length - 256 + i; const mix = i / 255;
+      data[at] = data[at] * (1 - mix) + data[0] * mix;
+    }
+    const wind = context.createBufferSource(); wind.buffer = buffer; wind.loop = true;
+    const filter = context.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 900;
+    const windGain = context.createGain(); windGain.gain.value = .65;
+    wind.connect(filter); filter.connect(windGain); windGain.connect(master); wind.start();
+    const breeze = context.createOscillator(); breeze.frequency.value = .045;
+    const modulation = context.createGain(); modulation.gain.value = .22;
+    breeze.connect(modulation); modulation.connect(windGain.gain); breeze.start();
+    scheduleSound(context, () => playForestTone(context, master, 'wood'), 8, 22);
+    scheduleSound(context, () => playForestTone(context, master, 'owl'), 17, 38);
+    updateSound(true);
+  } catch {
+    await stopSound(); updateSound(false, true);
+  } finally {
+    startingSound = false;
+    soundButtons.forEach(item => { item.disabled = false; });
+  }
+}));
 document.addEventListener('visibilitychange', () => { if (document.hidden && audio) stopSound(); });
 window.addEventListener('pagehide', () => { if (audio) stopSound(); });
 
